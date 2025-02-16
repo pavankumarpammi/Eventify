@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { getEventById } from '../../store/slices/eventSlice';
 import { createOrder } from '../../store/slices/orderSlice';
+import PaymentGateway from './PaymentGateway';
 
 const EventDetails = () => {
   const { id } = useParams();
@@ -26,7 +27,7 @@ const EventDetails = () => {
   const dispatch = useDispatch();
 
   const [tickets, setTickets] = useState(1);
-  const [openDialog, setOpenDialog] = useState(false);
+  const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
   const [bookingError, setBookingError] = useState('');
 
   const { event, isLoading } = useSelector((state) => state.events);
@@ -50,15 +51,10 @@ const EventDetails = () => {
       navigate('/login');
       return;
     }
-    setOpenDialog(true);
+    setOpenPaymentDialog(true);
   };
 
-  const handleBooking = () => {
-    if (tickets > event.availableTickets) {
-      setBookingError('Not enough tickets available');
-      return;
-    }
-
+  const handlePaymentSuccess = () => {
     const orderData = {
       eventId: event._id,
       numberOfTickets: tickets,
@@ -71,7 +67,7 @@ const EventDetails = () => {
     dispatch(createOrder(orderData))
       .unwrap()
       .then((response) => {
-        setOpenDialog(false);
+        setOpenPaymentDialog(false);
         navigate(`/dashboard`);
       })
       .catch((error) => {
@@ -194,33 +190,14 @@ const EventDetails = () => {
         </Grid>
       </Paper>
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-        <DialogTitle>Booking Confirmation</DialogTitle>
-        <DialogContent>
-          <Typography gutterBottom>
-            Are you sure you want to book {tickets} ticket(s) for {event.title}?
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 3 }}>
-            Total: ${event.price * tickets}
-          </Typography>
-          
-          {bookingError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {bookingError}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button 
-            onClick={handleBooking} 
-            variant="contained"
-            disabled={isBooking}
-          >
-            {isBooking ? 'Processing...' : 'Confirm Booking'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <PaymentGateway
+        open={openPaymentDialog}
+        onClose={() => setOpenPaymentDialog(false)}
+        onSuccess={handlePaymentSuccess}
+        amount={event?.price * tickets}
+        eventDetails={event}
+        ticketCount={tickets}
+      />
     </Container>
   );
 };

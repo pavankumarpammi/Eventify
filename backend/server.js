@@ -9,6 +9,7 @@ const fs = require('fs');
 const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const eventRequestRoutes = require('./routes/eventRequestRoutes');
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/eventMg',
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/event-requests', eventRequestRoutes);
 
 // Error Handler
 app.use((err, req, res, next) => {

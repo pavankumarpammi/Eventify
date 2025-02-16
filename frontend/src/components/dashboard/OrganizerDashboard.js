@@ -20,11 +20,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
+  Divider,
+  Alert,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import CommentIcon from '@mui/icons-material/Comment';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { getOrganizerEvents, deleteEvent } from '../../store/slices/eventSlice';
+import { getAllEventRequests, updateEventRequest } from '../../store/slices/eventRequestSlice';
+import axios from 'axios';
 
 const OrganizerDashboard = () => {
   const navigate = useNavigate();
@@ -32,12 +40,19 @@ const OrganizerDashboard = () => {
   const [tabValue, setTabValue] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [eventRequests, setEventRequests] = useState([]);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [openRequestDialog, setOpenRequestDialog] = useState(false);
+  const [comment, setComment] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const { user } = useSelector((state) => state.auth);
   const { events, isLoading } = useSelector((state) => state.events);
+  const { requests = [], isLoading: isLoadingRequests = false } = useSelector((state) => state.eventRequests || {});
 
   useEffect(() => {
     dispatch(getOrganizerEvents());
+    dispatch(getAllEventRequests());
   }, [dispatch]);
 
   const handleTabChange = (event, newValue) => {
@@ -53,6 +68,25 @@ const OrganizerDashboard = () => {
     }
   };
 
+  const handleUpdateRequest = async (requestId, status) => {
+    try {
+      await dispatch(updateEventRequest({
+        requestId,
+        updateData: {
+          status,
+          assignedTo: user._id,
+          comment: comment
+        }
+      }));
+      setComment('');
+      setOpenRequestDialog(false);
+      setSelectedRequest(null);
+      dispatch(getAllEventRequests());
+    } catch (error) {
+      console.error('Error updating request:', error);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'upcoming':
@@ -62,6 +96,12 @@ const OrganizerDashboard = () => {
       case 'completed':
         return 'default';
       case 'cancelled':
+        return 'error';
+      case 'approved':
+        return 'success';
+      case 'pending':
+        return 'warning';
+      case 'rejected':
         return 'error';
       default:
         return 'default';
@@ -203,7 +243,96 @@ const OrganizerDashboard = () => {
     </Card>
   );
 
-  if (isLoading) {
+  const renderRequestCard = (request) => (
+    <Card 
+      key={request._id} 
+      sx={{ 
+        mb: 3,
+        borderRadius: 4,
+        overflow: 'hidden',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      }}
+    >
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {request.title}
+          </Typography>
+          <Chip
+            label={request.status.toUpperCase()}
+            color={getStatusColor(request.status)}
+            sx={{ fontWeight: 600 }}
+          />
+        </Box>
+        <Typography variant="body1" color="text.secondary" gutterBottom>
+          Requested by: {request.user?.name || 'Unknown User'}
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          Expected Date: {new Date(request.expectedDate).toLocaleDateString()}
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          Budget: ${request.expectedBudget}
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          Attendees: {request.attendees}
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          Description: {request.description}
+        </Typography>
+        <Typography variant="body1" gutterBottom>
+          Requirements: {request.requirements}
+        </Typography>
+
+        {request.status === 'pending' && (
+          <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={() => handleUpdateRequest(request._id, 'approved')}
+              sx={{ 
+                borderRadius: '50px',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Approve
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<CancelIcon />}
+              onClick={() => handleUpdateRequest(request._id, 'rejected')}
+              sx={{ 
+                borderRadius: '50px',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Reject
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<CommentIcon />}
+              onClick={() => {
+                setSelectedRequest(request);
+                setOpenRequestDialog(true);
+              }}
+              sx={{ 
+                borderRadius: '50px',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Add Comment
+            </Button>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (isLoading || isLoadingRequests || loading) {
     return (
       <Box
         display="flex"
@@ -292,7 +421,7 @@ const OrganizerDashboard = () => {
             }}
           >
             <Tab label="My Events" />
-            <Tab label="Analytics" />
+            <Tab label="Event Requests" />
           </Tabs>
         </Paper>
 
@@ -314,105 +443,24 @@ const OrganizerDashboard = () => {
         )}
 
         {tabValue === 1 && (
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={4}>
+          <Box>
+            {requests && requests.length > 0 ? (
+              requests.map((request) => renderRequestCard(request))
+            ) : (
               <Paper 
                 sx={{ 
-                  p: 3, 
+                  p: 4, 
                   textAlign: 'center',
                   borderRadius: 4,
                   background: 'linear-gradient(135deg, rgba(26, 35, 126, 0.05) 0%, rgba(173, 20, 87, 0.05) 100%)',
-                  border: '1px solid rgba(26, 35, 126, 0.1)',
-                  transition: 'transform 0.3s ease',
-                  '&:hover': {
-                    transform: 'translateY(-5px)',
-                  },
                 }}
               >
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 700,
-                    color: '#1A237E',
-                    mb: 1,
-                  }}
-                >
-                  {events.length}
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  Total Events
+                <Typography variant="h6" color="text.secondary">
+                  No event requests found
                 </Typography>
               </Paper>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Paper 
-                sx={{ 
-                  p: 3, 
-                  textAlign: 'center',
-                  borderRadius: 4,
-                  background: 'linear-gradient(135deg, rgba(26, 35, 126, 0.05) 0%, rgba(173, 20, 87, 0.05) 100%)',
-                  border: '1px solid rgba(26, 35, 126, 0.1)',
-                  transition: 'transform 0.3s ease',
-                  '&:hover': {
-                    transform: 'translateY(-5px)',
-                  },
-                }}
-              >
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 700,
-                    color: '#1A237E',
-                    mb: 1,
-                  }}
-                >
-                  {events.reduce(
-                    (total, event) => total + (event.totalTickets - event.availableTickets),
-                    0
-                  )}
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  Tickets Sold
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Paper 
-                sx={{ 
-                  p: 3, 
-                  textAlign: 'center',
-                  borderRadius: 4,
-                  background: 'linear-gradient(135deg, rgba(26, 35, 126, 0.05) 0%, rgba(173, 20, 87, 0.05) 100%)',
-                  border: '1px solid rgba(26, 35, 126, 0.1)',
-                  transition: 'transform 0.3s ease',
-                  '&:hover': {
-                    transform: 'translateY(-5px)',
-                  },
-                }}
-              >
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 700,
-                    color: '#1A237E',
-                    mb: 1,
-                  }}
-                >
-                  ${events
-                    .reduce(
-                      (total, event) =>
-                        total +
-                        event.price * (event.totalTickets - event.availableTickets),
-                      0
-                    )
-                    .toFixed(2)}
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  Total Revenue
-                </Typography>
-              </Paper>
-            </Grid>
-          </Grid>
+            )}
+          </Box>
         )}
       </Box>
 
@@ -456,16 +504,88 @@ const OrganizerDashboard = () => {
           <Button 
             onClick={handleDeleteEvent} 
             variant="contained"
-            sx={{
-              bgcolor: '#AD1457',
-              '&:hover': {
-                bgcolor: '#8E0E49',
-              },
-              fontWeight: 600,
-              px: 3,
-            }}
+            color="error"
+            sx={{ fontWeight: 600, px: 3 }}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={openRequestDialog} 
+        onClose={() => setOpenRequestDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>Add Comment</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="Comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+            {selectedRequest?.comments?.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  Previous Comments
+                </Typography>
+                {selectedRequest.comments.map((comment, index) => (
+                  <Paper 
+                    key={index}
+                    sx={{ 
+                      p: 2, 
+                      mb: 2,
+                      borderRadius: 2,
+                      background: 'linear-gradient(135deg, rgba(26, 35, 126, 0.05) 0%, rgba(173, 20, 87, 0.05) 100%)',
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {comment.user.name} - {new Date(comment.createdAt).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body1">
+                      {comment.text}
+                    </Typography>
+                  </Paper>
+                ))}
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button 
+            onClick={() => setOpenRequestDialog(false)}
+            sx={{ 
+              color: '#1A237E',
+              fontWeight: 600,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => handleUpdateRequest(selectedRequest._id, selectedRequest.status)}
+            variant="contained"
+            disabled={!comment.trim()}
+            sx={{
+              background: 'linear-gradient(135deg, #1A237E 0%, #AD1457 100%)',
+              fontWeight: 600,
+              px: 3,
+              '&:hover': {
+                background: 'linear-gradient(135deg, #1A237E 20%, #AD1457 120%)',
+              },
+            }}
+          >
+            Add Comment
           </Button>
         </DialogActions>
       </Dialog>

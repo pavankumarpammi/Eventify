@@ -4,13 +4,11 @@ import eventReducer from './slices/eventSlice';
 import orderReducer from './slices/orderSlice';
 import eventRequestReducer from './slices/eventRequestSlice';
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
     auth: authReducer,
     events: eventReducer,
     orders: orderReducer,
     eventRequests: eventRequestReducer,
   },
-});
-
-export default store; 
+}); 
